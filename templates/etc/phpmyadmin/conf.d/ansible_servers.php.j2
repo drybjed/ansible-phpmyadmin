@@ -1,0 +1,88 @@
+<?php
+
+// {{ ansible_managed }}
+
+// Reset the server array
+$i = 0;
+
+{% macro print_config(data, key_list = [], array = False) %}
+{%   set chain = [] %}
+{%   for part in key_list %}
+{%     if part is number %}
+{%       set _ = chain.append("[" + part | string + "]") %}
+{%     else %}
+{%       set _ = chain.append("['" + part + "']") %}
+{%     endif %}
+{%   endfor %}
+{%   if data is number %}
+$cfg['Servers'][$i]{{ chain | join('') }} = {{ data }};
+{%   elif data is string %}
+{%     if data in [ True, False, 'True', 'False', 'true', 'false', 'TRUE', 'FALSE' ] %}
+$cfg['Servers'][$i]{{ chain | join('') }} = {{ data | upper }};
+{%     else %}
+$cfg['Servers'][$i]{{ chain | join('') }} = "{{ data }}";
+{%     endif %}
+{%   elif data is mapping %}
+{%     set output = [] %}
+{%     for key, value in data.iteritems() %}
+{%       if key == 'array' %}
+{%         set _ = output.append(print_config(value, key_list, array = True)) %}
+{%       else %}
+{%         set subkey_list = key_list + [ key ] %}
+{%         set _ = output.append(print_config(value, subkey_list, array)) %}
+{%       endif %}
+{%     endfor %}
+{%     for line in output %}
+{{ line }}{% endfor %}
+{%   else %}
+{%     set list_of_mappings = [] %}
+{%     set list_of_elements = [] %}
+{%     for value in data %}
+{%       if value is mapping %}
+{%         set _ = list_of_mappings.append(value) %}
+{%       else %}
+{%         set _ = list_of_elements.append(value) %}
+{%       endif %}
+{%     endfor %}
+{%     if list_of_mappings %}
+{%       for mapped_element in list_of_mappings %}
+{%         set map_loop = loop %}
+{%         for element_key, element_value in mapped_element.iteritems() %}
+{%           set subkey_list = key_list + [ map_loop.index0, element_key ] %}
+{{ print_config(element_value, subkey_list, array) }}{%         endfor %}
+{%       endfor %}
+{%     endif %}
+{%     if list_of_elements %}
+{%       if array %}
+$cfg['Servers'][$i]{{ chain | join('') }} = array({{ '"' + list_of_elements | join('", "') + '"' }});
+{%       else %}
+{%         for value in list_of_elements %}
+$cfg['Servers'][$i]{{ chain | join('') + '[]' }} = "{{ value }}";
+{%         endfor %}
+{%       endif %}
+{%     endif %}
+{%   endif %}
+{% endmacro %}
+{% for configuration_map in phpmyadmin__config_servers %}
+{%   if 'comment' in configuration_map.keys() and configuration_map['comment'] %}
+
+# {{ configuration_map["comment"] }}
+{%   endif %}
+$i++;
+{%   if ('no_default_options' in configuration_map.keys() and configuration_map['no_default_options'] | bool) %}
+{%     for config_key, config_value in configuration_map.iteritems() %}
+{%       if config_key not in [ 'comment', 'no_default_options' ] %}
+{%         set subkey_list = [ config_key ] %}
+{{ print_config(config_value, subkey_list) }}{% endif %}
+{%     endfor %}
+{%   else %}
+{%     set configuration_map_combined = (phpmyadmin__config_server_default_options | combine(configuration_map)) %}
+{%     for config_key, config_value in configuration_map_combined.iteritems() %}
+{%       if config_key not in [ 'comment', 'no_default_options' ] %}
+{%         set subkey_list = [ config_key ] %}
+{{ print_config(config_value, subkey_list) }}{% endif %}
+{%     endfor %}
+{%   endif %}
+
+{% endfor %}
+?>

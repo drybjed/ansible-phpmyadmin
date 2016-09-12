@@ -1,27 +1,50 @@
 ---
 
-- name: Install dbconfig-common
-  apt: pkg=dbconfig-common state=latest install_recommends=no
+- name: Make sure that dbconfig directory exists
+  file:
+    path: '/etc/dbconfig-common'
+    state: 'directory'
+    owner: 'root'
+    group: 'root'
+    mode: '0755'
 
 - name: Pre-configure PHPMyAdmin database
-  template: src=etc/dbconfig-common/phpmyadmin.conf.j2
-            dest=/etc/dbconfig-common/phpmyadmin.conf
-            owner=root group=root mode=0600
+  template:
+    src: 'etc/dbconfig-common/phpmyadmin.conf.j2'
+    dest: '/etc/dbconfig-common/phpmyadmin.conf'
+    owner: 'root'
+    group: 'root'
+    mode: '0600'
 
 - name: Install PHPMyAdmin packages
-  apt: pkg=phpmyadmin state=latest install_recommends=no
+  apt:
+    name: '{{ item }}'
+    state: 'present'
+    install_recommends: False
+  with_flattened:
+    - '{{ phpmyadmin__base_packages }}'
+    - '{{ phpmyadmin__packages }}'
 
 - name: Create database for PHPMyAdmin
-  mysql_db: name={{ phpmyadmin_control_database | default('phpmyadmin') }} state=present
-  register: phpmyadmin_database
+  mysql_db:
+    name: '{{ phpmyadmin__control_database }}'
+    state: 'present'
+  delegate_to: '{{ phpmyadmin__control_delegate_to }}'
+  register: phpmyadmin__register_database
 
 - name: Import PHPMyAdmin schema
-  mysql_db: name={{ phpmyadmin_control_database | default('phpmyadmin') }} state=import
-            target=/usr/share/dbconfig-common/data/phpmyadmin/install/mysql
-  when: phpmyadmin_database is defined and phpmyadmin_database.changed == True
+  mysql_db:
+    name: '{{ phpmyadmin__control_database }}'
+    state: 'import'
+    target: '/usr/share/dbconfig-common/data/phpmyadmin/install/mysql'
+  delegate_to: '{{ phpmyadmin__control_delegate_to }}'
+  when: (phpmyadmin__control_delegate_to == ansible_fqdn and
+         phpmyadmin__register_database|changed)
 
-- name: Create PHPMyAdmin control user
-  mysql_user: name={{ phpmyadmin_control_user | default('phpmyadmin') }} state=present
-              password={{ phpmyadmin_control_password }} priv='{{ phpmyadmin_control_database | default('phpmyadmin') }}.*:ALL'
-
-
+- name: Generate server configuration
+  template:
+    src: 'etc/phpmyadmin/conf.d/ansible_servers.php.j2'
+    dest: '/etc/phpmyadmin/conf.d/ansible_servers.php'
+    owner: 'root'
+    group: 'www-data'
+    mode: '0640'

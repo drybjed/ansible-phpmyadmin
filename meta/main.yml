@@ -4,24 +4,12 @@ dependencies:
 
   - role: debops.secret
 
-  - role: debops.php5
-    php5_packages: [ 'php5-mysql', 'php5-mcrypt', 'php5-gd' ]
-    php5_pools: [ '{{ phpmyadmin_php5_pool }}' ]
-    when: phpmyadmin_dependencies is defined and phpmyadmin_dependencies
-    tags: [ 'mysql', 'phpmyadmin' ]
-
-  - role: debops.nginx
-    nginx_servers: [ '{{ phpmyadmin_nginx_server }}' ]
-    nginx_upstreams: [ '{{ phpmyadmin_nginx_upstream_php5 }}' ]
-    when: phpmyadmin_dependencies is defined and phpmyadmin_dependencies
-    tags: [ 'mysql', 'phpmyadmin', 'nginx' ]
-
 galaxy_info:
   author: 'Maciej Delmanowski'
-  description: 'Install and configure PHPMyAdmin on a MySQL database server'
+  description: 'Install and configure PHPMyAdmin'
   company: 'DebOps'
-  license: 'GNU General Public License v3'
-  min_ansible_version: '1.7.0'
+  license: 'GPL-3.0'
+  min_ansible_version: '2.0.0'
   platforms:
   - name: Ubuntu
     versions:
@@ -34,7 +22,8 @@ galaxy_info:
     versions:
     - wheezy
     - jessie
-  categories:
-  - 'database:sql'
-  - 'system'
-
+  galaxy_tags:
+    - mysql
+    - mariadb
+    - percona
+    - phpmyadmin

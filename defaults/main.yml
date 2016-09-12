@@ -1,25 +1,254 @@
 ---
+# .. vim: foldmarker=[[[,]]]:foldmethod=marker
 
-# Should PHPMyAdmin role manage its own dependencies?
-phpmyadmin_dependencies: True
+# debops.phpmyadmin default variables [[[
+# =======================================
 
-# What subdomain should be used for PHPMyAdmin in nginx configuration
-phpmyadmin_domain: [ 'mysql.{{ ansible_domain }}' ]
+# .. contents:: Sections
+#    :local:
 
-# Default length of generated passwords
-phpmyadmin_password_length: '20'
 
-# Default PHPMyAdmin control password
-phpmyadmin_control_password: "{{ lookup('password', secret + '/credentials/' + ansible_fqdn + '/mysql/phpmyadmin/password length=' + phpmyadmin_password_length) }}"
+# PHPMyAdmin APT packages [[[
+# ---------------------------
 
+# .. envvar:: phpmyadmin__base_packages [[[
+#
+# List of APT packages which should be installed for PHPMyAdmin support.
+phpmyadmin__base_packages: [ 'phpmyadmin' ]
+
+
+# .. envvar:: phpmyadmin__packages [[[
+#
+# List of additional APT packages to install with PHPMyAdmin.
+phpmyadmin__packages: []
+
+
+# .. envvar:: phpmyadmin__domain [[[
+#
+# The domain used to configure ``nginx`` server for PHPMyAdmin.
+phpmyadmin__domain: '{{ ansible_domain }}'
+
+
+# .. envvar:: phpmyadmin__fqdn [[[
+#
+# The Fully Quallified Domain Name of the PHPMyAdmin application.
+phpmyadmin__fqdn: 'mysql.{{ phpmyadmin__domain }}'
+
+
+# .. envvar:: phpmyadmin__pasword_length [[[
+#
+# Default length of generated passwords.
+phpmyadmin__password_length: '48'
+
+
+# .. envvar:: phpmyadmin__allow [[[
+#
 # List of IP addresses or network ranges in CIDR format, allowed to access
-# PHPMyAdmin. Leave empty to allow access from all IP addresses/networks
-phpmyadmin_allow: []
-
-# Max upload size for nginx and php5
-phpmyadmin_upload_size: '64M'
-
-# Maximum number of PHP5 processes for PHPMyAdmin
-phpmyadmin_php5_max_children: '20'
+# PHPMyAdmin web interface. Leave empty to allow access from all
+# IP addresses/networks.
+phpmyadmin__allow: []
 
 
+# .. envvar:: phpmyadmin__upload_size [[[
+#
+# Maximum file upload size configured in ``nginx`` and ``php-fpm``.
+phpmyadmin__upload_size: '64M'
+
+
+# .. envvar:: phpmyadmin__php_max_children [[[
+#
+# Maximum number of ``php-fpm`` pool threads for PHPMyAdmin.
+phpmyadmin__php_max_children: '20'
+
+
+# PHPMyAdmin control database configuration [[[
+# ---------------------------------------------
+
+# .. envvar:: phpmyadmin__control_host [[[
+#
+# MariaDB host where the database is located, usually ``localhost``.
+phpmyadmin__control_host: '{{ ansible_local.mariadb.server
+                              if (ansible_local|d() and ansible_local.mariadb|d() and
+                                  ansible_local.mariadb.server|d())
+                              else "localhost" }}'
+
+
+# .. envvar:: phpmyadmin__control_port [[[
+#
+# MariaDB database port used to connect to the server.
+phpmyadmin__control_port: '{{ ansible_local.mariadb.port
+                              if (ansible_local|d() and ansible_local.mariadb|d() and
+                                  ansible_local.mariadb.port|d())
+                              else "3306" }}'
+
+
+# .. envvar:: phpmyadmin__control_delegate_to [[[
+#
+# If the control database is located on another host, this variable can be used
+# to tell Ansible where to delegate the configuration tasks.
+phpmyadmin__control_delegate_to: '{{ ansible_local.mariadb.delegate_to
+                                     if (ansible_local|d() and ansible_local.mariadb|d() and
+                                         ansible_local.mariadb.delegate_to|d())
+                                     else ansible_fqdn }}'
+
+
+# .. envvar:: phpmyadmin__control_user [[[
+#
+# Name of the MariaDB user which can connect to the control database.
+phpmyadmin__control_user: 'phpmyadmin'
+
+
+# .. envvar:: phpmyadmin__
+phpmyadmin__control_database: 'phpmyadmin'
+
+
+# .. envvar:: phpmyadmin__control_password [[[
+#
+# PHPMyAdmin control password.
+phpmyadmin__control_password: '{{ lookup("password", secret + "/mariadb/"
+                                  + phpmyadmin__control_delegate_to + "/credentials/"
+                                  + phpmyadmin__control_user + "/password length="
+                                  + phpmyadmin__password_length) }}'
+
+
+phpmyadmin__config_server_default_options:
+  extension: 'mysqli'
+  ssl:       True
+
+
+phpmyadmin__config_servers:
+  - '{{ phpmyadmin__config_server_localhost }}'
+
+  - host: 'mariadb.{{ ansible_domain }}'
+    connect_type: 'tcp'
+    port: '3306'
+#    AllowDeny:
+#      order: 'explicit'
+#      rules:
+#        - 'allow drybjed from all'
+
+phpmyadmin__config_server_localhost:
+  host: '{{ phpmyadmin__control_host }}'
+  connect_type: '{{ "socket" if phpmyadmin__control_host == "localhost" else "tcp" }}'
+  socket: ''
+  port: '{{ phpmyadmin__control_port }}'
+  extension: 'mysqli'
+  ssl: '{{ False if phpmyadmin__control_host == "localhost" else True }}'
+  controlhost:      '{{ phpmyadmin__control_host }}'
+  controlport:      '{{ phpmyadmin__control_port }}'
+  controluser:      '{{ phpmyadmin__control_user }}'
+  controlpass:      '{{ phpmyadmin__control_password }}'
+  pmadb:            '{{ phpmyadmin__control_database }}'
+  bookmarktable:    'pma__bookmark'
+  relation:         'pma__relation'
+  table_info:       'pma__table_info'
+  table_coords:     'pma__table_coords'
+  pdf_pages:        'pma__pdf_pages'
+  column_info:      'pma__column_info'
+  history:          'pma__history'
+  table_uiprefs:    'pma__table_uiprefs'
+  tracking:         'pma__tracking'
+  designer_coords:  'pma__designer_coords'
+  userconfig:       'pma__userconfig'
+  recent:           'pma__recent'
+  favorite:         'pma__favorite'
+  users:            'pma__users'
+  usergroups:       'pma__usergroups'
+  navigationhiding: 'pma__navigationhiding'
+  savedsearches:    'pma__savedsearches'
+#  AllowDeny: '{{ phpmyadmin__config_server_localhost_allowdeny }}'
+
+
+phpmyadmin__config_server_localhost_allowdeny:
+  order: 'deny,allow'
+  rules:
+    array: '{{ phpmyadmin__config_server_allowdeny_rules +
+               phpmyadmin__config_server_localhost_allowdeny_rules }}'
+
+
+phpmyadmin__config_server_allowdeny_rules:
+  - 'deny % from all'
+  - 'allow % from 127.0.1.1'
+  - 'allow % from ::1'
+  - 'allow % from localhost'
+  - 'allow root from localhost'
+  - 'allow root from 127.0.0.1'
+  - 'allow root from 10.0.0.0/8'
+  - 'allow root from 172.16.0.0/12'
+  - 'allow root from 192.168.0.0/16'
+  - 'allow root from ::1'
+
+phpmyadmin__config_server_localhost_allowdeny_rules: []
+
+# Configuration of other Ansible roles [[[
+# ----------------------------------------
+
+phpmyadmin__mariadb__dependent_users:
+  - name: '{{ phpmyadmin__control_user }}'
+    priv:
+      - 'mysql.*:USAGE'
+      - 'mysql.db:SELECT'
+      - 'mysql.host:SELECT'
+      - 'mysql.user:SELECT'
+      - 'mysql.tables_priv:SELECT'
+
+phpmyadmin__nginx__dependent_servers:
+  - by_role: 'debops.phpmyadmin'
+    type: 'php'
+    filename: 'debops.phpmyadmin'
+    name: '{{ phpmyadmin__fqdn }}'
+    root: '/usr/share/phpmyadmin'
+
+    options: |
+      client_max_body_size {{ phpmyadmin__upload_size }};
+
+    location:
+
+      # Required for location_allow to work
+      '/': 'try_files $uri $uri/ =404;'
+
+      '~ ^/(setup|libraries)': 'deny all;'
+
+    location_allow:
+      '/': '{{ phpmyadmin__allow }}'
+
+    php_upstream: 'php_phpmyadmin'
+
+    php_options: |
+      {% if phpmyadmin__allow|d() %}
+      {% for address in phpmyadmin__allow %}
+      allow {{ address }};
+      {% endfor %}
+      deny all;
+      {% endif %}
+
+phpmyadmin__nginx__dependent_upstreams:
+  - name: 'php_phpmyadmin'
+    type: 'php'
+    php_pool: 'phpmyadmin'
+
+phpmyadmin__php__dependent_packages: [ 'mysql', 'mcrypt', 'gd' ]
+
+phpmyadmin__php__dependent_pools:
+  - name: 'phpmyadmin'
+    user: 'www-data'
+    group: 'www-data'
+    pm_max_children: '{{ phpmyadmin__php_max_children }}'
+    php_flags:
+      magic_quotes_gpc: 'Off'
+      track_vars: 'On'
+      register_globals: 'Off'
+    php_values:
+      post_max_size: '{{ phpmyadmin__upload_size }}'
+      upload_max_filesize: '{{ phpmyadmin__upload_size }}'
+    php_admin_values:
+      upload_tmp_dir: '/var/lib/phpmyadmin/tmp'
+    php_admin_flags:
+      allow_url_fopen: 'Off'
+    open_basedir:
+      - '/usr/share/phpmyadmin/'
+      - '/etc/phpmyadmin/'
+      - '/var/lib/phpmyadmin/'
+      - '/usr/share/php/php-gettext/'
+      - '/usr/share/javascript/'
+      - '/usr/share/php/tcpdf/'
